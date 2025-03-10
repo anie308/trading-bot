@@ -9,7 +9,8 @@
       "skipLibCheck": true,
       "outDir": "./dist",
       "lib": [
-        "ES6"
+        "ES6",
+        "DOM"
       ],
       "moduleResolution": "node",
       "experimentalDecorators": true,
