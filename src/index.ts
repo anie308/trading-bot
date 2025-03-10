@@ -2,9 +2,11 @@ import axios from 'axios';
 import OpenAI from "openai";
 import express from 'express';
 import bodyParser from 'body-parser';
-import { RestClientV5 } from 'bybit-api';
-import { bybitClient } from './client';
 import Alpaca from "@alpacahq/alpaca-trade-api";
+import dotenv from 'dotenv';
+import brainjs from 'brain.js';
+
+dotenv.config();
 // Configuration
 const CONFIG = {
   server: {
@@ -19,7 +21,7 @@ const CONFIG = {
   },
   deepseek: {
     baseUrl: 'https://api.deepseek.com',
-    apiKey: ''
+    apiKey: process.env.DEEP_SEEK_KEY
   },
   telegram: {
     botToken: 'YOUR_TELEGRAM_BOT_TOKEN',
@@ -29,15 +31,16 @@ const CONFIG = {
 
 
 const alpaca = new Alpaca({
-  keyId: "YOUR_API_KEY",
-  secretKey: "YOUR_API_SECRET",
+  keyId: process.env.ALPACA_KEY,
+  secretKey: process.env.ALPACA_SECRET,
+  paper: true,
 });
 
 
 let options = {
   start: "2022-09-01",
   end: "2022-09-07",
-  timeframe: alpaca.newTimeframe(1, alpaca.timeframeUnit.DAY),
+  timeframe: alpaca.newTimeframe(1, alpaca.timeframeUnit.HOUR),
 };
 
 
@@ -52,47 +55,29 @@ const openaiClient = new OpenAI({
   apiKey: CONFIG.deepseek.apiKey
 });
 
-// Market data service
-// const marketService = {
-//   async fetchKlineData(symbol = 'BTCUSD', interval = '60', startTime, endTime) {
-//     try {
-//       const response = await bybitClient.getKline({
-//         category: 'inverse',
-//         symbol: symbol,
-//         interval: '60',
-//         start: startTime || 1670601600000,
-//         end: endTime || 1670608800000,
-//       });
-      
-//       return response;
-//     } catch (error) {
-//       console.error('Error fetching market data:', error);
-//       throw error;
-//     }
-//   }
-// };
+
 
 // AI Signal service
-const signalService = {
-  async getTradeSignal(marketData) {
+  const  getTradeSignal = async (marketData) =>  {
     try {
-      const completion = await openaiClient.chat.completions.create({
-        messages: [
-          {
-            role: "user", 
-            content: `Based on these prices ${JSON.stringify(marketData)}, should I buy or sell BTC? Provide a concise recommendation.`
-          }
-        ],
-        model: "deepseek-chat"
-      });
+      const net = new brainjs.recurrent.LSTMTimeStep();
+      net.fromJSON(JSON.parse(process.env.MODEL));
+      // const completion = await openaiClient.chat.completions.create({
+      //   messages: [
+      //     {
+      //       role: "user", 
+      //       content: `Based on these prices ${JSON.stringify(marketData)}, should I buy or sell? Provide a concise recommendation.`
+      //     }
+      //   ],
+      //   model: "deepseek-chat"
+      // });
       
-      return completion.choices[0].message.content;
+      // return completion.choices[0].message.content;
     } catch (error) {
       console.error('Error getting AI signal:', error);
       throw error;
     }
   }
-};
 
 // Notification service
 const notificationService = {
@@ -127,6 +112,9 @@ app.post('/webhook', async (req, res) => {
 
         // Get market data
         console.table(bars.get("BTC/USD"));
+
+        const aiPrediction = await getTradeSignal(bars.get("BTC/USD"));
+        console.log('AI prediction:', aiPrediction);
 
         res.status(200).json({ message: 'Webhook received' });
       } catch (error) {
